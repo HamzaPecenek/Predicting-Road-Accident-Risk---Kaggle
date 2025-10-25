@@ -1,1 +1,584 @@
-{"metadata":{"kernelspec":{"language":"python","display_name":"Python 3","name":"python3"},"language_info":{"name":"python","version":"3.11.13","mimetype":"text/x-python","codemirror_mode":{"name":"ipython","version":3},"pygments_lexer":"ipython3","nbconvert_exporter":"python","file_extension":".py"},"kaggle":{"accelerator":"none","dataSources":[{"sourceId":91721,"databundleVersionId":13760552,"sourceType":"competition"}],"dockerImageVersionId":31153,"isInternetEnabled":true,"language":"python","sourceType":"notebook","isGpuEnabled":false}},"nbformat_minor":4,"nbformat":4,"cells":[{"cell_type":"code","source":"# ============================================================\n#  Cell 1: Setup & Load Base Data\n# ============================================================\n\nimport numpy as np\nimport pandas as pd\nfrom pathlib import Path\n\n# Paths\nDATA_DIR = Path(\".\")\nTRAIN_PATH = DATA_DIR / \"/kaggle/input/playground-series-s5e10/train.csv\"\nTEST_PATH  = DATA_DIR / \"/kaggle/input/playground-series-s5e10/test.csv\"\n\ntrain = pd.read_csv(TRAIN_PATH)\ntest  = pd.read_csv(TEST_PATH)\n\nprint(\"Shapes ->\", train.shape, test.shape)\ndisplay(train.head(3))\n","metadata":{"_uuid":"8f2839f25d086af736a60e9eeb907d3b93b6e0e5","_cell_guid":"b1076dfc-b9ad-4769-8c92-a6c4dae69d19","trusted":true,"execution":{"iopub.status.busy":"2025-10-25T10:37:34.991820Z","iopub.execute_input":"2025-10-25T10:37:34.992107Z","iopub.status.idle":"2025-10-25T10:37:37.446837Z","shell.execute_reply.started":"2025-10-25T10:37:34.992086Z","shell.execute_reply":"2025-10-25T10:37:37.445816Z"}},"outputs":[{"name":"stdout","text":"Shapes -> (517754, 14) (172585, 13)\n","output_type":"stream"},{"output_type":"display_data","data":{"text/plain":"   id road_type  num_lanes  curvature  speed_limit  lighting weather  \\\n0   0     urban          2       0.06           35  daylight   rainy   \n1   1     urban          4       0.99           35  daylight   clear   \n2   2     rural          4       0.63           70       dim   clear   \n\n   road_signs_present  public_road time_of_day  holiday  school_season  \\\n0               False         True   afternoon    False           True   \n1                True        False     evening     True           True   \n2               False         True     morning     True          False   \n\n   num_reported_accidents  accident_risk  \n0                       1           0.13  \n1                       0           0.35  \n2                       2           0.30  ","text/html":"<div>\n<style scoped>\n    .dataframe tbody tr th:only-of-type {\n        vertical-align: middle;\n    }\n\n    .dataframe tbody tr th {\n        vertical-align: top;\n    }\n\n    .dataframe thead th {\n        text-align: right;\n    }\n</style>\n<table border=\"1\" class=\"dataframe\">\n  <thead>\n    <tr style=\"text-align: right;\">\n      <th></th>\n      <th>id</th>\n      <th>road_type</th>\n      <th>num_lanes</th>\n      <th>curvature</th>\n      <th>speed_limit</th>\n      <th>lighting</th>\n      <th>weather</th>\n      <th>road_signs_present</th>\n      <th>public_road</th>\n      <th>time_of_day</th>\n      <th>holiday</th>\n      <th>school_season</th>\n      <th>num_reported_accidents</th>\n      <th>accident_risk</th>\n    </tr>\n  </thead>\n  <tbody>\n    <tr>\n      <th>0</th>\n      <td>0</td>\n      <td>urban</td>\n      <td>2</td>\n      <td>0.06</td>\n      <td>35</td>\n      <td>daylight</td>\n      <td>rainy</td>\n      <td>False</td>\n      <td>True</td>\n      <td>afternoon</td>\n      <td>False</td>\n      <td>True</td>\n      <td>1</td>\n      <td>0.13</td>\n    </tr>\n    <tr>\n      <th>1</th>\n      <td>1</td>\n      <td>urban</td>\n      <td>4</td>\n      <td>0.99</td>\n      <td>35</td>\n      <td>daylight</td>\n      <td>clear</td>\n      <td>True</td>\n      <td>False</td>\n      <td>evening</td>\n      <td>True</td>\n      <td>True</td>\n      <td>0</td>\n      <td>0.35</td>\n    </tr>\n    <tr>\n      <th>2</th>\n      <td>2</td>\n      <td>rural</td>\n      <td>4</td>\n      <td>0.63</td>\n      <td>70</td>\n      <td>dim</td>\n      <td>clear</td>\n      <td>False</td>\n      <td>True</td>\n      <td>morning</td>\n      <td>True</td>\n      <td>False</td>\n      <td>2</td>\n      <td>0.30</td>\n    </tr>\n  </tbody>\n</table>\n</div>"},"metadata":{}}],"execution_count":1},{"cell_type":"code","source":"# ============================================================\n#  Cell 2: Identify Columns & Basic Config\n# ============================================================\n\ntarget_col = \"accident_risk\"\nid_col = \"id\"\n\n# --- Column groups from EDA ---\nnum_cols = [\"curvature\", \"speed_limit\", \"num_lanes\", \"num_reported_accidents\"]\nbool_cols = [\"road_signs_present\", \"public_road\", \"holiday\", \"school_season\"]\ncat_cols = [\"road_type\", \"lighting\", \"weather\", \"time_of_day\"]\n\n# Verify presence\nfor c in num_cols + bool_cols + cat_cols + [target_col]:\n    assert c in train.columns, f\"{c} missing!\"\n\nprint(\"✅ Column groups established.\")\n","metadata":{"trusted":true,"execution":{"iopub.status.busy":"2025-10-25T10:37:43.692549Z","iopub.execute_input":"2025-10-25T10:37:43.692905Z","iopub.status.idle":"2025-10-25T10:37:43.701319Z","shell.execute_reply.started":"2025-10-25T10:37:43.692883Z","shell.execute_reply":"2025-10-25T10:37:43.700148Z"}},"outputs":[{"name":"stdout","text":"✅ Column groups established.\n","output_type":"stream"}],"execution_count":2},{"cell_type":"code","source":"# ============================================================\n#  Cell 3: Core Numeric Transformations\n# ============================================================\n\ndef add_numeric_features(df):\n    df = df.copy()\n    # Log transform of accident history\n    df[\"accidents_log1p\"] = np.log1p(df[\"num_reported_accidents\"])\n    # Binary threshold (≥3)\n    df[\"accidents_ge3\"] = (df[\"num_reported_accidents\"] >= 3).astype(int)\n    # Curvature squared\n    df[\"curvature_sq\"] = df[\"curvature\"] ** 2\n    return df\n\ntrain = add_numeric_features(train)\ntest  = add_numeric_features(test)\n\nprint(\"✅ Numeric transforms added.\")\n","metadata":{"trusted":true,"execution":{"iopub.status.busy":"2025-10-25T10:37:54.284877Z","iopub.execute_input":"2025-10-25T10:37:54.285178Z","iopub.status.idle":"2025-10-25T10:37:54.364166Z","shell.execute_reply.started":"2025-10-25T10:37:54.285154Z","shell.execute_reply":"2025-10-25T10:37:54.363341Z"}},"outputs":[{"name":"stdout","text":"✅ Numeric transforms added.\n","output_type":"stream"}],"execution_count":3},{"cell_type":"code","source":"# ============================================================\n#  Cell 4: Ensure Categorical Columns Are Strings\n# ============================================================\n\nfor c in cat_cols:\n    train[c] = train[c].astype(str)\n    test[c]  = test[c].astype(str)\n\nprint(\"✅ Categoricals cast to str for combos.\")\n","metadata":{"trusted":true,"execution":{"iopub.status.busy":"2025-10-25T10:38:00.254458Z","iopub.execute_input":"2025-10-25T10:38:00.254781Z","iopub.status.idle":"2025-10-25T10:38:00.308271Z","shell.execute_reply.started":"2025-10-25T10:38:00.254756Z","shell.execute_reply":"2025-10-25T10:38:00.307538Z"}},"outputs":[{"name":"stdout","text":"✅ Categoricals cast to str for combos.\n","output_type":"stream"}],"execution_count":4},{"cell_type":"code","source":"# ============================================================\n#  Cell 5: Create Interaction Features\n# ============================================================\n\ndef add_interactions(df):\n    df = df.copy()\n\n    # Numeric × Numeric\n    df[\"curv_speed\"] = df[\"curvature\"] * df[\"speed_limit\"]\n\n    # Numeric × Categorical\n    df[\"curv_lighting\"] = df[\"curvature\"].astype(str) + \"_\" + df[\"lighting\"]\n    df[\"speed_lighting\"] = df[\"speed_limit\"].astype(str) + \"_\" + df[\"lighting\"]\n    df[\"curv_weather\"] = df[\"curvature\"].astype(str) + \"_\" + df[\"weather\"]\n    df[\"speed_weather\"] = df[\"speed_limit\"].astype(str) + \"_\" + df[\"weather\"]\n\n    # Categorical × Categorical\n    df[\"lighting_weather\"] = df[\"lighting\"] + \"_\" + df[\"weather\"]\n\n    # Numeric × Categorical (accident history)\n    df[\"accidents_lighting\"] = df[\"num_reported_accidents\"].astype(str) + \"_\" + df[\"lighting\"]\n\n    return df\n\ntrain = add_interactions(train)\ntest  = add_interactions(test)\n\nprint(\"✅ Interaction features created.\")\n","metadata":{"trusted":true,"execution":{"iopub.status.busy":"2025-10-25T10:38:06.926474Z","iopub.execute_input":"2025-10-25T10:38:06.926818Z","iopub.status.idle":"2025-10-25T10:38:09.436442Z","shell.execute_reply.started":"2025-10-25T10:38:06.926795Z","shell.execute_reply":"2025-10-25T10:38:09.435325Z"}},"outputs":[{"name":"stdout","text":"✅ Interaction features created.\n","output_type":"stream"}],"execution_count":5},{"cell_type":"code","source":"# ============================================================\n#  Cell 6: Mild Derived Ratios\n# ============================================================\n\ndef add_ratios(df):\n    df = df.copy()\n    df[\"lanes_per_speed\"] = df[\"speed_limit\"] / (df[\"num_lanes\"] + 1e-3)\n    df[\"curvature_over_speed\"] = df[\"curvature\"] / (df[\"speed_limit\"] + 1e-3)\n    return df\n\ntrain = add_ratios(train)\ntest  = add_ratios(test)\n\nprint(\"✅ Ratio features added.\")\n","metadata":{"trusted":true,"execution":{"iopub.status.busy":"2025-10-25T10:38:15.190995Z","iopub.execute_input":"2025-10-25T10:38:15.191340Z","iopub.status.idle":"2025-10-25T10:38:15.678365Z","shell.execute_reply.started":"2025-10-25T10:38:15.191314Z","shell.execute_reply":"2025-10-25T10:38:15.677282Z"}},"outputs":[{"name":"stdout","text":"✅ Ratio features added.\n","output_type":"stream"}],"execution_count":6},{"cell_type":"code","source":"# ============================================================\n#  Cell 7: Drop ID & Reorder Columns\n# ============================================================\n\nid_train = train[\"id\"].copy()\nid_test  = test[\"id\"].copy()\n\ntrain = train.drop(columns=[\"id\"])\ntest  = test.drop(columns=[\"id\"])\n\n# Target last for readability\ncols = [c for c in train.columns if c != target_col] + [target_col]\ntrain = train[cols]\n\nprint(\"✅ ID removed (stored separately).\")\n","metadata":{"trusted":true,"execution":{"iopub.status.busy":"2025-10-25T10:38:21.415961Z","iopub.execute_input":"2025-10-25T10:38:21.416321Z","iopub.status.idle":"2025-10-25T10:38:21.660023Z","shell.execute_reply.started":"2025-10-25T10:38:21.416259Z","shell.execute_reply":"2025-10-25T10:38:21.658705Z"}},"outputs":[{"name":"stdout","text":"✅ ID removed (stored separately).\n","output_type":"stream"}],"execution_count":7},{"cell_type":"code","source":"# ============================================================\n#  Cell 8: Verify & Save Feature-Engineered CSVs\n# ============================================================\n\nprint(\"Train shape before save:\", train.shape)\nprint(\"Test shape before save:\", test.shape)\n\ntrain_out = train.copy()\ntest_out = test.copy()\n\n# Reattach IDs\ntrain_out.insert(0, \"id\", id_train)\ntest_out.insert(0, \"id\", id_test)\n\n# Save\ntrain_out.to_csv(\"train_fe.csv\", index=False)\ntest_out.to_csv(\"test_fe.csv\", index=False)\n\nprint(\"✅ Saved:\")\nprint(\" - train_fe.csv\")\nprint(\" - test_fe.csv\")\n","metadata":{"trusted":true,"execution":{"iopub.status.busy":"2025-10-25T10:38:26.100108Z","iopub.execute_input":"2025-10-25T10:38:26.100750Z","iopub.status.idle":"2025-10-25T10:38:37.747932Z","shell.execute_reply.started":"2025-10-25T10:38:26.100723Z","shell.execute_reply":"2025-10-25T10:38:37.746609Z"}},"outputs":[{"name":"stdout","text":"Train shape before save: (517754, 25)\nTest shape before save: (172585, 24)\n✅ Saved:\n - train_fe.csv\n - test_fe.csv\n","output_type":"stream"}],"execution_count":8},{"cell_type":"code","source":"","metadata":{"trusted":true},"outputs":[],"execution_count":null}]}
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "fb4b6ec3",
+   "metadata": {
+    "_cell_guid": "b1076dfc-b9ad-4769-8c92-a6c4dae69d19",
+    "_uuid": "8f2839f25d086af736a60e9eeb907d3b93b6e0e5",
+    "execution": {
+     "iopub.execute_input": "2025-10-25T10:40:11.836485Z",
+     "iopub.status.busy": "2025-10-25T10:40:11.836049Z",
+     "iopub.status.idle": "2025-10-25T10:40:15.361980Z",
+     "shell.execute_reply": "2025-10-25T10:40:15.360909Z"
+    },
+    "papermill": {
+     "duration": 3.532304,
+     "end_time": "2025-10-25T10:40:15.363772",
+     "exception": false,
+     "start_time": "2025-10-25T10:40:11.831468",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Shapes -> (517754, 14) (172585, 13)\n"
+     ]
+    },
+    {
+     "data": {
+      "text/html": [
+       "<div>\n",
+       "<style scoped>\n",
+       "    .dataframe tbody tr th:only-of-type {\n",
+       "        vertical-align: middle;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe tbody tr th {\n",
+       "        vertical-align: top;\n",
+       "    }\n",
+       "\n",
+       "    .dataframe thead th {\n",
+       "        text-align: right;\n",
+       "    }\n",
+       "</style>\n",
+       "<table border=\"1\" class=\"dataframe\">\n",
+       "  <thead>\n",
+       "    <tr style=\"text-align: right;\">\n",
+       "      <th></th>\n",
+       "      <th>id</th>\n",
+       "      <th>road_type</th>\n",
+       "      <th>num_lanes</th>\n",
+       "      <th>curvature</th>\n",
+       "      <th>speed_limit</th>\n",
+       "      <th>lighting</th>\n",
+       "      <th>weather</th>\n",
+       "      <th>road_signs_present</th>\n",
+       "      <th>public_road</th>\n",
+       "      <th>time_of_day</th>\n",
+       "      <th>holiday</th>\n",
+       "      <th>school_season</th>\n",
+       "      <th>num_reported_accidents</th>\n",
+       "      <th>accident_risk</th>\n",
+       "    </tr>\n",
+       "  </thead>\n",
+       "  <tbody>\n",
+       "    <tr>\n",
+       "      <th>0</th>\n",
+       "      <td>0</td>\n",
+       "      <td>urban</td>\n",
+       "      <td>2</td>\n",
+       "      <td>0.06</td>\n",
+       "      <td>35</td>\n",
+       "      <td>daylight</td>\n",
+       "      <td>rainy</td>\n",
+       "      <td>False</td>\n",
+       "      <td>True</td>\n",
+       "      <td>afternoon</td>\n",
+       "      <td>False</td>\n",
+       "      <td>True</td>\n",
+       "      <td>1</td>\n",
+       "      <td>0.13</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>1</th>\n",
+       "      <td>1</td>\n",
+       "      <td>urban</td>\n",
+       "      <td>4</td>\n",
+       "      <td>0.99</td>\n",
+       "      <td>35</td>\n",
+       "      <td>daylight</td>\n",
+       "      <td>clear</td>\n",
+       "      <td>True</td>\n",
+       "      <td>False</td>\n",
+       "      <td>evening</td>\n",
+       "      <td>True</td>\n",
+       "      <td>True</td>\n",
+       "      <td>0</td>\n",
+       "      <td>0.35</td>\n",
+       "    </tr>\n",
+       "    <tr>\n",
+       "      <th>2</th>\n",
+       "      <td>2</td>\n",
+       "      <td>rural</td>\n",
+       "      <td>4</td>\n",
+       "      <td>0.63</td>\n",
+       "      <td>70</td>\n",
+       "      <td>dim</td>\n",
+       "      <td>clear</td>\n",
+       "      <td>False</td>\n",
+       "      <td>True</td>\n",
+       "      <td>morning</td>\n",
+       "      <td>True</td>\n",
+       "      <td>False</td>\n",
+       "      <td>2</td>\n",
+       "      <td>0.30</td>\n",
+       "    </tr>\n",
+       "  </tbody>\n",
+       "</table>\n",
+       "</div>"
+      ],
+      "text/plain": [
+       "   id road_type  num_lanes  curvature  speed_limit  lighting weather  \\\n",
+       "0   0     urban          2       0.06           35  daylight   rainy   \n",
+       "1   1     urban          4       0.99           35  daylight   clear   \n",
+       "2   2     rural          4       0.63           70       dim   clear   \n",
+       "\n",
+       "   road_signs_present  public_road time_of_day  holiday  school_season  \\\n",
+       "0               False         True   afternoon    False           True   \n",
+       "1                True        False     evening     True           True   \n",
+       "2               False         True     morning     True          False   \n",
+       "\n",
+       "   num_reported_accidents  accident_risk  \n",
+       "0                       1           0.13  \n",
+       "1                       0           0.35  \n",
+       "2                       2           0.30  "
+      ]
+     },
+     "metadata": {},
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "# ============================================================\n",
+    "#  Cell 1: Setup & Load Base Data\n",
+    "# ============================================================\n",
+    "\n",
+    "import numpy as np\n",
+    "import pandas as pd\n",
+    "from pathlib import Path\n",
+    "\n",
+    "# Paths\n",
+    "DATA_DIR = Path(\".\")\n",
+    "TRAIN_PATH = DATA_DIR / \"/kaggle/input/playground-series-s5e10/train.csv\"\n",
+    "TEST_PATH  = DATA_DIR / \"/kaggle/input/playground-series-s5e10/test.csv\"\n",
+    "\n",
+    "train = pd.read_csv(TRAIN_PATH)\n",
+    "test  = pd.read_csv(TEST_PATH)\n",
+    "\n",
+    "print(\"Shapes ->\", train.shape, test.shape)\n",
+    "display(train.head(3))\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "81cc3a8c",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2025-10-25T10:40:15.371992Z",
+     "iopub.status.busy": "2025-10-25T10:40:15.371270Z",
+     "iopub.status.idle": "2025-10-25T10:40:15.378243Z",
+     "shell.execute_reply": "2025-10-25T10:40:15.376968Z"
+    },
+    "papermill": {
+     "duration": 0.012518,
+     "end_time": "2025-10-25T10:40:15.379782",
+     "exception": false,
+     "start_time": "2025-10-25T10:40:15.367264",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "✅ Column groups established.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# ============================================================\n",
+    "#  Cell 2: Identify Columns & Basic Config\n",
+    "# ============================================================\n",
+    "\n",
+    "target_col = \"accident_risk\"\n",
+    "id_col = \"id\"\n",
+    "\n",
+    "# --- Column groups from EDA ---\n",
+    "num_cols = [\"curvature\", \"speed_limit\", \"num_lanes\", \"num_reported_accidents\"]\n",
+    "bool_cols = [\"road_signs_present\", \"public_road\", \"holiday\", \"school_season\"]\n",
+    "cat_cols = [\"road_type\", \"lighting\", \"weather\", \"time_of_day\"]\n",
+    "\n",
+    "# Verify presence\n",
+    "for c in num_cols + bool_cols + cat_cols + [target_col]:\n",
+    "    assert c in train.columns, f\"{c} missing!\"\n",
+    "\n",
+    "print(\"✅ Column groups established.\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "3962f9f7",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2025-10-25T10:40:15.387321Z",
+     "iopub.status.busy": "2025-10-25T10:40:15.386972Z",
+     "iopub.status.idle": "2025-10-25T10:40:15.462305Z",
+     "shell.execute_reply": "2025-10-25T10:40:15.460761Z"
+    },
+    "papermill": {
+     "duration": 0.081171,
+     "end_time": "2025-10-25T10:40:15.464130",
+     "exception": false,
+     "start_time": "2025-10-25T10:40:15.382959",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "✅ Numeric transforms added.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# ============================================================\n",
+    "#  Cell 3: Core Numeric Transformations\n",
+    "# ============================================================\n",
+    "\n",
+    "def add_numeric_features(df):\n",
+    "    df = df.copy()\n",
+    "    # Log transform of accident history\n",
+    "    df[\"accidents_log1p\"] = np.log1p(df[\"num_reported_accidents\"])\n",
+    "    # Binary threshold (≥3)\n",
+    "    df[\"accidents_ge3\"] = (df[\"num_reported_accidents\"] >= 3).astype(int)\n",
+    "    # Curvature squared\n",
+    "    df[\"curvature_sq\"] = df[\"curvature\"] ** 2\n",
+    "    return df\n",
+    "\n",
+    "train = add_numeric_features(train)\n",
+    "test  = add_numeric_features(test)\n",
+    "\n",
+    "print(\"✅ Numeric transforms added.\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "5e06b1ac",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2025-10-25T10:40:15.472910Z",
+     "iopub.status.busy": "2025-10-25T10:40:15.471942Z",
+     "iopub.status.idle": "2025-10-25T10:40:15.536845Z",
+     "shell.execute_reply": "2025-10-25T10:40:15.535695Z"
+    },
+    "papermill": {
+     "duration": 0.071098,
+     "end_time": "2025-10-25T10:40:15.538676",
+     "exception": false,
+     "start_time": "2025-10-25T10:40:15.467578",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "✅ Categoricals cast to str for combos.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# ============================================================\n",
+    "#  Cell 4: Ensure Categorical Columns Are Strings\n",
+    "# ============================================================\n",
+    "\n",
+    "for c in cat_cols:\n",
+    "    train[c] = train[c].astype(str)\n",
+    "    test[c]  = test[c].astype(str)\n",
+    "\n",
+    "print(\"✅ Categoricals cast to str for combos.\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "cb3245db",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2025-10-25T10:40:15.546315Z",
+     "iopub.status.busy": "2025-10-25T10:40:15.545964Z",
+     "iopub.status.idle": "2025-10-25T10:40:18.020319Z",
+     "shell.execute_reply": "2025-10-25T10:40:18.019275Z"
+    },
+    "papermill": {
+     "duration": 2.479941,
+     "end_time": "2025-10-25T10:40:18.021915",
+     "exception": false,
+     "start_time": "2025-10-25T10:40:15.541974",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "✅ Interaction features created.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# ============================================================\n",
+    "#  Cell 5: Create Interaction Features\n",
+    "# ============================================================\n",
+    "\n",
+    "def add_interactions(df):\n",
+    "    df = df.copy()\n",
+    "\n",
+    "    # Numeric × Numeric\n",
+    "    df[\"curv_speed\"] = df[\"curvature\"] * df[\"speed_limit\"]\n",
+    "\n",
+    "    # Numeric × Categorical\n",
+    "    df[\"curv_lighting\"] = df[\"curvature\"].astype(str) + \"_\" + df[\"lighting\"]\n",
+    "    df[\"speed_lighting\"] = df[\"speed_limit\"].astype(str) + \"_\" + df[\"lighting\"]\n",
+    "    df[\"curv_weather\"] = df[\"curvature\"].astype(str) + \"_\" + df[\"weather\"]\n",
+    "    df[\"speed_weather\"] = df[\"speed_limit\"].astype(str) + \"_\" + df[\"weather\"]\n",
+    "\n",
+    "    # Categorical × Categorical\n",
+    "    df[\"lighting_weather\"] = df[\"lighting\"] + \"_\" + df[\"weather\"]\n",
+    "\n",
+    "    # Numeric × Categorical (accident history)\n",
+    "    df[\"accidents_lighting\"] = df[\"num_reported_accidents\"].astype(str) + \"_\" + df[\"lighting\"]\n",
+    "\n",
+    "    return df\n",
+    "\n",
+    "train = add_interactions(train)\n",
+    "test  = add_interactions(test)\n",
+    "\n",
+    "print(\"✅ Interaction features created.\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "1777bfdd",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2025-10-25T10:40:18.029962Z",
+     "iopub.status.busy": "2025-10-25T10:40:18.029665Z",
+     "iopub.status.idle": "2025-10-25T10:40:18.446341Z",
+     "shell.execute_reply": "2025-10-25T10:40:18.445151Z"
+    },
+    "papermill": {
+     "duration": 0.422898,
+     "end_time": "2025-10-25T10:40:18.448205",
+     "exception": false,
+     "start_time": "2025-10-25T10:40:18.025307",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "✅ Ratio features added.\n"
+     ]
+    }
+   ],
+   "source": [
+    "# ============================================================\n",
+    "#  Cell 6: Mild Derived Ratios\n",
+    "# ============================================================\n",
+    "\n",
+    "def add_ratios(df):\n",
+    "    df = df.copy()\n",
+    "    df[\"lanes_per_speed\"] = df[\"speed_limit\"] / (df[\"num_lanes\"] + 1e-3)\n",
+    "    df[\"curvature_over_speed\"] = df[\"curvature\"] / (df[\"speed_limit\"] + 1e-3)\n",
+    "    return df\n",
+    "\n",
+    "train = add_ratios(train)\n",
+    "test  = add_ratios(test)\n",
+    "\n",
+    "print(\"✅ Ratio features added.\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "67813d2d",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2025-10-25T10:40:18.456604Z",
+     "iopub.status.busy": "2025-10-25T10:40:18.456225Z",
+     "iopub.status.idle": "2025-10-25T10:40:18.678639Z",
+     "shell.execute_reply": "2025-10-25T10:40:18.677714Z"
+    },
+    "papermill": {
+     "duration": 0.228468,
+     "end_time": "2025-10-25T10:40:18.680336",
+     "exception": false,
+     "start_time": "2025-10-25T10:40:18.451868",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "✅ ID removed (stored separately).\n"
+     ]
+    }
+   ],
+   "source": [
+    "# ============================================================\n",
+    "#  Cell 7: Drop ID & Reorder Columns\n",
+    "# ============================================================\n",
+    "\n",
+    "id_train = train[\"id\"].copy()\n",
+    "id_test  = test[\"id\"].copy()\n",
+    "\n",
+    "train = train.drop(columns=[\"id\"])\n",
+    "test  = test.drop(columns=[\"id\"])\n",
+    "\n",
+    "# Target last for readability\n",
+    "cols = [c for c in train.columns if c != target_col] + [target_col]\n",
+    "train = train[cols]\n",
+    "\n",
+    "print(\"✅ ID removed (stored separately).\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 8,
+   "id": "853e0af3",
+   "metadata": {
+    "execution": {
+     "iopub.execute_input": "2025-10-25T10:40:18.688688Z",
+     "iopub.status.busy": "2025-10-25T10:40:18.687896Z",
+     "iopub.status.idle": "2025-10-25T10:40:28.609582Z",
+     "shell.execute_reply": "2025-10-25T10:40:28.608269Z"
+    },
+    "papermill": {
+     "duration": 9.927676,
+     "end_time": "2025-10-25T10:40:28.611425",
+     "exception": false,
+     "start_time": "2025-10-25T10:40:18.683749",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Train shape before save: (517754, 25)\n",
+      "Test shape before save: (172585, 24)\n",
+      "✅ Saved:\n",
+      " - train_fe.csv\n",
+      " - test_fe.csv\n"
+     ]
+    }
+   ],
+   "source": [
+    "# ============================================================\n",
+    "#  Cell 8: Verify & Save Feature-Engineered CSVs\n",
+    "# ============================================================\n",
+    "\n",
+    "print(\"Train shape before save:\", train.shape)\n",
+    "print(\"Test shape before save:\", test.shape)\n",
+    "\n",
+    "train_out = train.copy()\n",
+    "test_out = test.copy()\n",
+    "\n",
+    "# Reattach IDs\n",
+    "train_out.insert(0, \"id\", id_train)\n",
+    "test_out.insert(0, \"id\", id_test)\n",
+    "\n",
+    "# Save\n",
+    "train_out.to_csv(\"train_fe.csv\", index=False)\n",
+    "test_out.to_csv(\"test_fe.csv\", index=False)\n",
+    "\n",
+    "print(\"✅ Saved:\")\n",
+    "print(\" - train_fe.csv\")\n",
+    "print(\" - test_fe.csv\")\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "1e5323c1",
+   "metadata": {
+    "papermill": {
+     "duration": 0.003565,
+     "end_time": "2025-10-25T10:40:28.620232",
+     "exception": false,
+     "start_time": "2025-10-25T10:40:28.616667",
+     "status": "completed"
+    },
+    "tags": []
+   },
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "kaggle": {
+   "accelerator": "none",
+   "dataSources": [
+    {
+     "databundleVersionId": 13760552,
+     "sourceId": 91721,
+     "sourceType": "competition"
+    }
+   ],
+   "dockerImageVersionId": 31153,
+   "isGpuEnabled": false,
+   "isInternetEnabled": true,
+   "language": "python",
+   "sourceType": "notebook"
+  },
+  "kernelspec": {
+   "display_name": "Python 3",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.11.13"
+  },
+  "papermill": {
+   "default_parameters": {},
+   "duration": 22.682359,
+   "end_time": "2025-10-25T10:40:29.245890",
+   "environment_variables": {},
+   "exception": null,
+   "input_path": "__notebook__.ipynb",
+   "output_path": "__notebook__.ipynb",
+   "parameters": {},
+   "start_time": "2025-10-25T10:40:06.563531",
+   "version": "2.6.0"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
